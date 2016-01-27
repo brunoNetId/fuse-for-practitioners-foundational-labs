@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.apache.camel.EndpointInject;
 import org.apache.camel.Produce;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
+import org.apache.camel.impl.DefaultExchange;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.apache.camel.test.spring.CamelSpringTestSupport;
 import org.junit.Test;
@@ -22,7 +24,14 @@ public class ValidateTransformationTest extends CamelSpringTestSupport {
 
 
     @Test
-    public void transform() throws Exception {
+    public void transform() throws Exception
+    {
+    	DefaultExchange request = new DefaultExchange(context);
+    	
+    	request.getIn().setBody("Rotobots,NA,true,Bill,Smith,100 N Park Ave.,Phoenix,AZ,85017,602-555-1100");
+    	
+    	template.send("direct:test", request);
+    	
         // setup expectations
 
         // set expected body as the unpretty print version of the json
@@ -39,6 +48,10 @@ public class ValidateTransformationTest extends CamelSpringTestSupport {
     protected RouteBuilder createRouteBuilder() throws Exception {
         return new RouteBuilder() {
             public void configure() throws Exception {
+            	
+            	from("direct:test")
+            	.to("direct:csv2json")
+            	.to("mock:check");
             }
         };
     }

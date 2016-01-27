@@ -37,6 +37,8 @@ public class CustomerWSImpl implements CustomerWS {
     @WebResult(name = "CorporateAccount")
     @SOAPBinding(parameterStyle = SOAPBinding.ParameterStyle.BARE)
     public CorporateAccount updateAccount(Account account) {
+    	
+    	System.out.println("WS in action 1");
         CorporateAccount ca = new CorporateAccount();
 
 

@@ -8,6 +8,7 @@ import javax.jws.WebResult;
 import javax.jws.WebService;
 import javax.jws.soap.SOAPBinding;
 import javax.xml.bind.annotation.XmlSeeAlso;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -39,7 +40,15 @@ public class CustomerWSImpl implements CustomerWS {
     @WebResult(name = "CorporateAccount")
     @SOAPBinding(parameterStyle = SOAPBinding.ParameterStyle.BARE)
     public CorporateAccount updateAccount(Account account) {
+
+    	System.out.println("WS in action 2");
         CorporateAccount ca = new CorporateAccount();
+        
+        ca.setId(8);
+        ca.setSalesContact("BRUNO");
+        
+        ca.setCompany(account.getCompany());
+        ca.setContact(account.getContact());
 
 
         return ca;

@@ -1,5 +1,6 @@
 package org.globex.usecase.service;
 
+import org.apache.camel.Body;
 import org.globex.globex.Account;
 import org.globex.globex.Company;
 
@@ -12,9 +13,11 @@ public class CustomerRestImpl implements CustomerRest {
 
     @Override
     public Account enrich(Account account) {
-        Company company = account.getCompany();
-        String region = company.getGeo();
-
+    	
+    	System.out.println("REST service in action");
+        //Company company = account.getCompany();
+        //String region = company.getGeo();
+        account.getCompany().setName("WithNetty");;
 
         return account;
     }

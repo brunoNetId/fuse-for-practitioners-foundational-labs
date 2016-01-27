@@ -8,6 +8,45 @@
        http://camel.apache.org/schema/spring/camel-spring.xsd">
 
     <camelContext trace="false" xmlns="http://camel.apache.org/schema/spring">
-        <propertyPlaceholder id="properties" location="fabric8/route.properties"/>
-    </camelContext>
+  <propertyPlaceholder location="fabric8/route.properties" id="properties"/>
+  <endpoint uri="dozer:xxxx?sourceModel=org.acme.Customer&amp;targetModel=account.Account&amp;marshalId=transform-json&amp;mappingFile=transformation.xml" id="xxxx"/>
+  <dataFormats>
+    <bindy type="Csv" classType="org.acme.Customer" id="bindyDataformat"/>
+    <json library="Jackson" id="json"/>
+    <json library="Jackson" id="transform-json"/>
+  </dataFormats>
+  <onException>
+    <exception>java.lang.Exception</exception>
+    <handled>
+      <constant>true</constant>
+    </handled>
+    <log message="my message"/>
+    <to uri="file:src/data/error?fileName=account-${property.CamelSplitIndex}.json"/>
+  </onException>
+  <route>
+    <from uri="file:src/data/inbox?fileName=customers.csv&amp;noop=true"/>
+    <log message="trace1: ${body}"/>
+    <to uri="direct:csv2json"/>
+    <split>
+      <tokenize token="\n"></tokenize>
+      <log message="good so far"/>
+      <log message="${body}"/>
+<!--       <unmarshal ref="bindyDataformat"/>
+      <log message="java ${body}"/>
+      <to ref="xxxx"/>
+      
+      <log message="json ${body}"/> -->
+    </split>
+  </route>
+  
+  <route id="csv2json">
+  	<from uri="direct:csv2json"/>
+      <unmarshal ref="bindyDataformat"/>
+      <log message="java ${body}"/>
+      <to ref="xxxx"/>
+      
+      <log message="json ${body}"/>
+  	
+  </route>
+</camelContext>
 </beans>

@@ -5,7 +5,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.cxf.jaxrs.impl.ResponseImpl;
 import org.apache.cxf.message.MessageContentsList;
-import org.globex.Account;
+import org.globex.globex.Account;
 import org.globex.CorporateAccount;
 
 import java.io.IOException;

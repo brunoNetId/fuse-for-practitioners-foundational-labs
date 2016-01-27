@@ -9,7 +9,8 @@
        http://camel.apache.org/schema/cxf/camel-cxf-spring.xsd
        http://camel.apache.org/schema/spring
        http://camel.apache.org/schema/spring/camel-spring.xsd">
-
+   
+   <!-- For some reason the H2 server did not allow me to connect -->
     <!-- H2 Datasource -->
     <bean id="usecaseDB" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
         <property name="driverClassName" value="org.h2.Driver"/>
@@ -18,21 +19,134 @@
         <property name="password" value=""/>
     </bean>
 
-    <!-- SQL Component -->
-    <bean id="sql" class="org.apache.camel.component.sql.SqlComponent">
+	<bean id="fordb" class="org.fuse.usecase.ProcessorBean"/>
 
+    <bean id="myDataSource" class="org.apache.tomcat.jdbc.pool.DataSource" destroy-method="close">
+        <property name="driverClassName" value="org.h2.Driver"/>
+        <property name="url" value="jdbc:h2:tcp://localhost:9123/jbossfuse-demo"/>
+        <property name="username" value="sa"/>
+        <property name="password" value=""/>
+        <property name="initialSize" value="5"/>
+        <property name="maxActive" value="10"/>
+        <property name="maxIdle" value="5"/>
+        <property name="minIdle" value="2"/>
     </bean>
 
-    <cxf:cxfEndpoint id="customerWebService">
-    </cxf:cxfEndpoint>
+
+<bean id="myAggregator" class="org.fuse.usecase.AccountAggregator"/>
+    <!-- SQL Component -->
+    <bean id="sql" class="org.apache.camel.component.sql.SqlComponent">
+    <property name="dataSource" ref="myDataSource"/>
+    </bean>
+
+    <cxf:cxfEndpoint id="customerWebService"
+                     address="http://localhost:9090/ws/customerService"
+                     serviceClass="org.fuse.usecase.service.CustomerWS" />
 
     <cxf:rsServer id="customerRestService">
     </cxf:rsServer>
+    
+<!--     <bean id="jsonProvider" class="org.apache.cxf.jaxrs.provider.json.JSONProvider"> -->
+    
+    <!-- <bean id="jsonProvider" class="com.fasterxml.jackson.jaxrs.json.JacksonJsonProvider"/> -->
+    <bean id="jsonProvider" class="com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider"/>
+    
+    <bean id="customerServiceBean" class="org.globex.usecase.service.CustomerRestImpl"/>
+    
+    <bean id="wsserverbean" class="org.fuse.usecase.service.CustomerWSImpl"/>
+    
 
     <cxf:rsClient id="customerRestServiceClient">
     </cxf:rsClient>
 
-    <camelContext trace="false" xmlns="http://camel.apache.org/schema/spring">
-        <propertyPlaceholder id="properties" location="fabric8/route.properties"/>
-    </camelContext>
+    <!-- marshal ref="json"/--><!--     <multicast strategyRef="myAggregator" parallelAggregate="false">
+      <to uri="direct:haha"/>
+      <to uri="direct:hoho"/>
+    </multicast> --><!--bean ref="dataSource" beanType="org.apache.tomcat.jdbc.pool.DataSource"/--><!--     <to uri="cxf:bean:customerServiceBean?providers=jsonProvider&amp;populateFromClass=org.globex.usecase.service.CustomerRestImpl" /> --><camelContext trace="false" xmlns="http://camel.apache.org/schema/spring">
+  <propertyPlaceholder location="fabric8/route.properties" id="properties"/>
+  <!-- <endpoint uri="dozer:json2java?sourceModel=account.Account&amp;targetModel=org.globex.Account&amp;unmarshalId=accountAccount&amp;mappingFile=transformation.xml" id="json2java"/> -->
+  
+ 
+ <endpoint uri="dozer:serverTransform?sourceModel=account.Account&amp;targetModel=org.globex.globex.Account&amp;unmarshalId=accountAccount&amp;mappingFile=serverTransform.xml" id="serverTransform"/>
+  <dataFormats>
+    <json library="Jackson" id="json"/>
+    <json library="Jackson" unmarshalTypeName="account.Account" id="accountAccount"/>
+    <json library="Jackson" unmarshalTypeName="org.globex.Account" id="myformat"/>
+  </dataFormats>
+  
+  <onException>
+    <exception>java.lang.Exception</exception>
+    <handled>
+      <constant>true</constant>
+    </handled>
+    <log message="wrong wrong wrong: ${exception.message} ${exception.stacktrace}"/>
+  </onException>
+  
+  <route>
+    <from uri="file:src/data/inbox?fileName=account.json&amp;noop=true"/>
+    <log message="from file: ${body}"/>
+    
+    <multicast strategyRef="myAggregator">
+	    <to uri="direct:rest-service"/>
+	    <to uri="direct:ws-service"/>
+    </multicast>
+
+ 	<bean ref="fordb" method="defineNamedParameters"/>
+    <log message="Map: ${body}"/>
+    <to uri="sql:insert into usecase.t_account (SALES_CONTACT,COMPANY_NAME,COMPANY_GEO,COMPANY_ACTIVE,CONTACT_FIRST_NAME,CONTACT_LAST_NAME,CONTACT_ADDRESS,CONTACT_CITY,CONTACT_STATE,CONTACT_ZIP,CONTACT_PHONE,CREATION_DATE,CREATION_USER) values (:#SALES_CONTACT,:#COMPANY_NAME,:#COMPANY_GEO,:#COMPANY_ACTIVE,:#CONTACT_FIRST_NAME,:#CONTACT_LAST_NAME,:#CONTACT_ADDRESS,:#CONTACT_CITY,:#CONTACT_STATE,:#CONTACT_ZIP,:#CONTACT_PHONE,:#CREATION_DATE,:#CREATION_USER)"/>
+  </route>
+  
+  <!-- I'm purposefully not using a CXF client.
+       REST calls are very easy, and Netty-HTTP is very efficient -->
+  <route id="rest">
+    <from uri="direct:rest-service"/>
+	    <setHeader headerName="Content-Type">
+	      <constant>application/json</constant>
+	    </setHeader>
+	    <to uri="netty-http:http://localhost:10000/customerservice/enrich"/>
+	    <convertBodyTo type="java.lang.String"/>
+	    <log message="rest response: ${body}"/>
+	    <to ref="serverTransform"/>
+	    <log message="response to POJO: ${body}"/>
+  </route>
+  
+  <route id="ws-call">
+    <from uri="direct:ws-service"/>
+    	<unmarshal ref="myformat"/>
+    	<log message="unmarshal: ${body}"/>
+   	    <to uri="cxf:bean:customerWebService"/>
+    	<log message="response: ${body}"/>
+	    <setBody><simple>${body[0]}</simple></setBody>
+	    <log message="response: ${body}"/>
+  </route>
+  
+  <!-- In this REST-Server we have decoupled the HTTP layer from CXF
+       This gives us full control on HTTP, and Netty-Http is very efficient  -->
+  <route id="rest-server">
+    <from uri="netty-http:http://localhost:10000?matchOnUriPrefix=true"/>
+    <convertBodyTo type="java.lang.String"/>
+    <log message="Netty got it: ${header.Content-Type}"/>
+    <to uri="cxfbean:customerServiceBean?providers=jsonProvider"/>
+  </route>
+  
+  <!-- In this WS-Server we have decoupled the HTTP layer from CXF
+       This gives us full control on HTTP  -->
+  <route id="ws-server">
+    <from uri="netty-http:http://localhost:9090?matchOnUriPrefix=true"/>
+    <convertBodyTo type="java.lang.String"/>
+    <log message="WS Netty got it: ${body}"/>
+    <to uri="cxfbean:wsserverbean"/>
+    <convertBodyTo type="java.lang.String"/>
+	<log message="CXF response: ${body}"/>
+  </route>
+   
+ <!-- This WS-Server uses CXF directly -->
+<!--    
+  <route>
+  <from uri="cxf:bean:customerWebService"/>
+   <log message="cxf server ${body}"/>
+   <bean ref="wsserverbean" method="updateAccount"/>
+  </route>
+   -->
+</camelContext>
 </beans>

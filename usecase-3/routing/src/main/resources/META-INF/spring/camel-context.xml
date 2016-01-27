@@ -7,35 +7,124 @@
        http://camel.apache.org/schema/spring
        http://camel.apache.org/schema/spring/camel-spring.xsd">
 
-    <!-- H2 Datasource -->
-    <bean id="usecaseDB" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+
+
+	<bean id="dbData" class="org.fuse.usecase.ProcessorBean"/>
+
+   <!--  H2 Datasource -->
+    <bean id="myDataSource" class="org.apache.tomcat.jdbc.pool.DataSource" destroy-method="close">
         <property name="driverClassName" value="org.h2.Driver"/>
-        <property name="url" value="jdbc:h2:tcp://localhost/~/usecaseDB"/>
+        <property name="url" value="jdbc:h2:tcp://localhost:9123/jbossfuse-demo"/>
         <property name="username" value="sa"/>
         <property name="password" value=""/>
+        <property name="initialSize" value="5"/>
+        <property name="maxActive" value="10"/>
+        <property name="maxIdle" value="5"/>
+        <property name="minIdle" value="2"/>
+    </bean>
+    
+      <!-- SQL Component -->
+    <bean id="sql" class="org.apache.camel.component.sql.SqlComponent">
+    <property name="dataSource" ref="myDataSource"/>
     </bean>
 
-    <!-- SQL Component -->
-    <bean id="sql" class="org.apache.camel.component.sql.SqlComponent">
-    </bean>
 
     <!-- Spring JMS TxManager -->
-    <bean id="jmsTransactionManager" class="org.springframework.jms.connection.JmsTransactionManager">
-    </bean>
-
-    <!-- JMS ConnectionFactory  -->
+<!--     <bean id="jmsTransactionManager" class="org.springframework.jms.connection.JmsTransactionManager">
+    </bean> -->
+<!-- 
+    JMS ConnectionFactory 
     <bean id="jmsConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
-    </bean>
-
-    <!-- ActiveMQ Camel Component - Tx -->
+    </bean> -->
+<!-- 
+    ActiveMQ Camel Component - Tx
     <bean id="amq-tx" class="org.apache.activemq.camel.component.ActiveMQComponent">
     </bean>
-
-    <!-- ActiveMQ Camel Component - No Tx -->
+-->
+<!--     ActiveMQ Camel Component - No Tx
+ -->
     <bean id="amq-notx" class="org.apache.activemq.camel.component.ActiveMQComponent">
+    <property name="brokerURL" value="tcp://localhost:61616"/>
     </bean>
-
+    
     <camelContext trace="false" xmlns="http://camel.apache.org/schema/spring">
         <propertyPlaceholder id="properties" location="fabric8/route.properties"/>
+          <dataFormats>
+    <bindy type="Csv" classType="org.acme.Customer" id="bindyDataformat"/>
+     <json library="Jackson" id="json"/>
+<!--    <json library="Jackson" id="transform-json"/> -->
+  </dataFormats>
+  
+  
+  <onException>
+    <exception>java.lang.IllegalArgumentException</exception>
+    <handled>
+      <constant>true</constant>
+    </handled>
+    <log message="my message: ${exception.message} ${exception.stacktrace}"/>
+    <to uri="activemq:topic:errorqueue"/>
+  </onException>
+   
+     <route>
+	    <from uri="activemq:topic:errorqueue"/>
+	    <log message="got error messages ${body}"/>
+	    <to uri="direct:insertdb"/>
+    </route>
+        
+    <route>
+	    <from uri="file:src/data/inbox?fileName=customers.csv&amp;noop=true"/>
+	    <split >
+	      <tokenize token="\n"/>
+		    <to uri="direct:csv2json"/>
+		    <log message="it pretends it sends to AMQ: ${body}"/>
+	    </split>
+    </route>
+        
+   <route id="csv2json">
+  	<from uri="direct:csv2json"/>
+      <unmarshal ref="bindyDataformat"/>
+      <marshal ref="json"/>
+<!--       <log message="java ${body}"/>
+      <to ref="xxxx"/>
+      <log message="json ${body}"/> -->
+  	
+  </route>
+  
+  <route id="insertdb">
+  
+  <from uri="direct:insertdb"/>
+   	<bean ref="dbData" method="defineNamedParameters"/>
+    <log message="Map: ${body}"/>
+    <doTry>
+    <to uri="sql:insert into usecase.t_error (ERROR_CODE,ERROR_MESSAGE,MESSAGE,STATUS) values (:#ERROR_CODE,:#ERROR_MESSAGE,:#MESSAGE,:#STATUS)"/>   
+
+ 	<doCatch>
+ 		<exception>java.lang.Exception</exception>
+ 		<handled><constant>true</constant></handled>
+ 		<log message="do catch: ${exception.message} ${exception.stacktrace}"/>
+ 	</doCatch>
+ 	 	</doTry>
+  </route>
+  
+  <route id="polldb">
+  <from uri="sql:select * from usecase.t_error where STATUS='FIXED'"/>
+    <log message="got from DB ${body}"/>
+    <log message="1 is: ${body['ID']}"/>
+    <setHeader headerName="status"><simple>${body['ID']}</simple></setHeader>
+    
+
+    <doTry>
+    	<to uri="sql:UPDATE USECASE.T_ERROR SET STATUS='DONE' where ID=:#ID"/>
+ 		<log message="FIXED: it pretends it sends to AMQ: ${body['MESSAGE']}"/>
+ 	<doCatch>
+ 		<exception>java.lang.Exception</exception>
+ 		<handled><constant>true</constant></handled>
+ 		<log message="insert catch: ${exception.message} ${exception.stacktrace}"/>
+ 	</doCatch>
+ 	</doTry>
+
+    
+  </route>
+        
     </camelContext>
 </beans>

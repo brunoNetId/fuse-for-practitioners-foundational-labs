@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<mappings xmlns="http://dozer.sourceforge.net" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://dozer.sourceforge.net http://dozer.sourceforge.net/schema/beanmapping.xsd">
+    <configuration>
+        <wildcard>false</wildcard>
+    </configuration>
+    <mapping>
+        <class-a>account.Account</class-a>
+        <class-b>org.globex.Account</class-b>
+        <field>
+            <a>company.active</a>
+            <b>company.active</b>
+        </field>
+        <field>
+            <a>company.geo</a>
+            <b>company.geo</b>
+        </field>
+        <field>
+            <a>company.name</a>
+            <b>company.name</b>
+        </field>
+        <field>
+            <a>contact.city</a>
+            <b>contact.city</b>
+        </field>
+    </mapping>
+</mappings>
